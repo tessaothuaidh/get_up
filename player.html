@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MP3 Плеер</title>
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:#0b0f14; color:#e8edf4; display:grid; place-items:center; min-height:100vh;
+    }
+    .card{
+      width:min(560px, calc(100vw - 32px));
+      background:#121826; border:1px solid #23304a; border-radius:16px; padding:18px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    h1{ margin:0 0 10px; font-size:18px; font-weight:650; letter-spacing:.2px; }
+    .meta{
+      display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+      margin-bottom:10px;
+    }
+    .track{
+      font-size:14px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      max-width: 70%;
+    }
+    .time{ font-variant-numeric: tabular-nums; font-size:13px; opacity:.9; }
+    .progressWrap{
+      display:flex; align-items:center; gap:10px;
+      margin: 6px 0 14px;
+    }
+    input[type="range"]{ width:100%; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button{
+      border:1px solid #2b3a5a; background:#182238; color:#e8edf4;
+      padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:650;
+    }
+    button:hover{ background:#1b2a46; }
+    button:active{ transform:translateY(1px); }
+
+    .vol{
+      display:flex; align-items:center; gap:10px; margin-left:auto; flex:1; min-width:220px;
+    }
+    .vol label{ white-space:nowrap; font-size:13px; opacity:.9; }
+
+    .status{ margin-top:10px; font-size:13px; opacity:.9; }
+    .hint{
+      margin-top:14px; padding-top:12px; border-top:1px dashed #2b3a5a;
+      font-size:13px; color:#cfe0ff; opacity:.95; line-height:1.35;
+    }
+    .small{ margin-top:6px; font-size:12px; opacity:.7; }
+    .pill{
+      display:inline-block; padding:2px 8px; border-radius:999px;
+      background:#0f1b33; border:1px solid #2b3a5a; font-size:12px; margin-left:6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>MP3-плеер <span class="pill">GitHub Pages</span></h1>
+
+    <!-- Трек лежит в репозитории по пути /audio/track.mp3 -->
+    <audio id="audio" preload="metadata" src="audio/track.mp3"></audio>
+
+    <div class="meta">
+      <div class="track" id="trackName">track.mp3</div>
+      <div class="time" id="timeReadout">00:00 / 00:00</div>
+    </div>
+
+    <div class="progressWrap">
+      <input id="progress" type="range" min="0" max="1000" step="1" value="0" />
+    </div>
+
+    <div class="row">
+      <button id="playBtn" type="button">▶ Плей</button>
+      <button id="pauseBtn" type="button">⏸ Пауза</button>
+
+      <div class="vol">
+        <label for="volume">Громкость</label>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" />
+      </div>
+    </div>
+
+    <div class="status" id="status">Готово. Нажмите «Плей».</div>
+
+    <div class="hint">
+      Можно открыть другое приложение или другую страницу/вкладку браузера —
+      музыка будет играть фоново (пока окно/вкладка плеера не закрыта).
+      <div class="small">Подсказка: некоторые браузеры могут ограничивать звук без действия пользователя — поэтому запуск делается кнопкой «Плей».</div>
+    </div>
+  </div>
+
+  <script>
+    const audio = document.getElementById("audio");
+    const playBtn = document.getElementById("playBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const volume = document.getElementById("volume");
+    const status = document.getElementById("status");
+
+    const trackNameEl = document.getElementById("trackName");
+    const timeReadout = document.getElementById("timeReadout");
+    const progress = document.getElementById("progress");
+
+    // --- helpers ---
+    function formatTime(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
+    function updateTimeUI() {
+      const cur = audio.currentTime || 0;
+      const dur = audio.duration || 0;
+      timeReadout.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+
+      // прогресс: используем 0..1000 для плавности
+      if (dur > 0) {
+        const v = Math.round((cur / dur) * 1000);
+        if (!isSeeking) progress.value = String(v);
+      } else {
+        if (!isSeeking) progress.value = "0";
+      }
+    }
+
+    // --- track name (из src) ---
+    const src = audio.getAttribute("src") || "track.mp3";
+    trackNameEl.textContent = decodeURIComponent(src.split("/").pop() || "track.mp3");
+
+    // --- volume ---
+    audio.volume = parseFloat(volume.value);
+    volume.addEventListener("input", () => {
+      audio.volume = parseFloat(volume.value);
+      status.textContent = `Громкость: ${Math.round(audio.volume * 100)}%`;
+    });
+
+    // --- play / pause ---
+    playBtn.addEventListener("click", async () => {
+      try {
+        await audio.play();
+        status.textContent = "Играет… Можно переключаться на другие вкладки.";
+      } catch (e) {
+        status.textContent = "Не удалось запустить. Попробуйте ещё раз (браузер мог заблокировать звук).";
+      }
+    });
+
+    pauseBtn.addEventListener("click", () => {
+      audio.pause();
+      status.textContent = "Пауза.";
+    });
+
+    // --- progress seek ---
+    let isSeeking = false;
+
+    progress.addEventListener("pointerdown", () => { isSeeking = true; });
+    window.addEventListener("pointerup", () => { isSeeking = false; });
+
+    progress.addEventListener("input", () => {
+      // во время перетаскивания показываем “предпросмотр” времени
+      const dur = audio.duration || 0;
+      if (dur > 0) {
+        const target = (parseInt(progress.value, 10) / 1000) * dur;
+        timeReadout.textContent = `${formatTime(target)} / ${formatTime(dur)}`;
+      }
+    });
+
+    progress.addEventListener("change", () => {
+      const dur = audio.duration || 0;
+      if (dur > 0) {
+        const target = (parseInt(progress.value, 10) / 1000) * dur;
+        audio.currentTime = Math.max(0, Math.min(dur, target));
+        updateTimeUI();
+      }
+    });
+
+    // --- audio events ---
+    audio.addEventListener("loadedmetadata", updateTimeUI);
+    audio.addEventListener("timeupdate", updateTimeUI);
+    audio.addEventListener("durationchange", updateTimeUI);
+
+    audio.addEventListener("ended", () => {
+      status.textContent = "Трек закончился.";
+      updateTimeUI();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && !audio.paused) {
+        status.textContent = "Играет в фоне… (вы на другой вкладке)";
+      }
+    });
+
+    // первичная отрисовка
+    updateTimeUI();
+  </script>
+</body>
+</html>
